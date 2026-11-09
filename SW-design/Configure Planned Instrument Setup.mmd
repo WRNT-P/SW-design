@@ -1,0 +1,48 @@
+sequenceDiagram
+    actor TelescopeOperator
+    participant Cli as OcsCli
+    participant SetupSvc as InstrumentSetupService
+    participant ProgRepo as ObservingProgramRepository
+    participant Gateway as InstrumentGateway
+    participant Prog as ObservingProgram
+    participant Config as InstrumentConfiguration
+
+    TelescopeOperator->>Cli: setupInstrument(programId)
+    Cli->>SetupSvc: setupInstrument(programId)
+    SetupSvc->>ProgRepo: findById(programId)
+    ProgRepo-->>SetupSvc: ObservingProgram
+    alt program not found (ObservingProgram = null)
+        SetupSvc-->>Cli: false
+        Cli-->>TelescopeOperator: Show result: Setup failed
+    else program found
+        SetupSvc->>Prog: getConfiguration()
+        Prog-->>SetupSvc: InstrumentConfiguration
+        SetupSvc->>Config: getRequiredConfig()
+        Config-->>SetupSvc: requiredConfig
+
+        SetupSvc->>Gateway: readCurrentConfig()
+        Gateway-->>SetupSvc: actualConfig
+        SetupSvc->>Config: matches(actualConfig)
+        Config-->>SetupSvc: boolean
+
+        opt actual config differs from required (matches = false)
+            SetupSvc->>Gateway: applyConfig(requiredConfig)
+            Note right of Gateway: Command sent to ICS (simulated)
+            Gateway-->>SetupSvc: boolean
+        end
+
+        SetupSvc->>Gateway: readCurrentConfig()
+        Gateway-->>SetupSvc: verifiedConfig
+        SetupSvc->>Config: matches(verifiedConfig)
+        Config-->>SetupSvc: boolean
+
+        alt re-check passed (matches = true)
+            SetupSvc->>Config: markReady()
+            SetupSvc->>ProgRepo: save(program)
+            SetupSvc-->>Cli: true
+            Cli-->>TelescopeOperator: Show result: Instrument ready
+        else re-check failed (matches = false)
+            SetupSvc-->>Cli: false
+            Cli-->>TelescopeOperator: Show result: Setup failed
+        end
+    end

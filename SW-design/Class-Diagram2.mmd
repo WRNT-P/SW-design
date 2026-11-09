@@ -1,0 +1,282 @@
+classDiagram
+
+    namespace ocs.bootstrap {
+        class Main {
+            +main(args: String[])$ void
+        }
+    }
+
+    namespace ocs.cli {
+        class OcsCli {
+            -submissionService : ProgramSubmissionService
+            -setupService : InstrumentSetupService
+            -executionService : ProgramExecutionService
+            -warningService : WarningConfirmationService
+            +OcsCli(submissionService: ProgramSubmissionService, setupService: InstrumentSetupService, executionService: ProgramExecutionService, warningService: WarningConfirmationService)
+            +start() void
+            +submitProgram(planId: String, programId: String) void
+            +setupInstrument(programId: String) void
+            +startProgram(programId: String) void
+            +confirmWarning(programId: String, warningId: String, observerId: String, proceed: boolean) void
+        }
+    }
+
+    namespace ocs.domain {
+        class SciencePlan {
+            -planId : String
+            -status : String
+            -programs : List~ObservingProgram~
+            +SciencePlan(planId: String, programs: List~ObservingProgram~)
+            +getPlanId() String
+            +getStatus() String
+            +getProgram(programId: String) ObservingProgram
+        }
+
+        class ObservingProgram {
+            -programId : String
+            -status : String
+            -isLocked : boolean
+            -warnings : List~SoftErrorWarning~
+            -configuration : InstrumentConfiguration
+            -sessions : List~ObservationSession~
+            +ObservingProgram(programId: String, configuration: InstrumentConfiguration)
+            +getProgramId() String
+            +validate() boolean
+            +submit() void
+            +lock() void
+            +start() void
+            +addWarning(warning: SoftErrorWarning) void
+            +getConfiguration() InstrumentConfiguration
+        }
+
+        class InstrumentConfiguration {
+            -configId : String
+            -requiredConfig : String
+            -isReady : boolean
+            +InstrumentConfiguration(configId: String, requiredConfig: String)
+            +getRequiredConfig() String
+            +matches(actualConfig: String) boolean
+            +markReady() void
+            +isInstrumentReady() boolean
+        }
+
+        class SoftErrorWarning {
+            -warningId : String
+            -condition : String
+            -decision : WarningDecision
+            +SoftErrorWarning(warningId: String, condition: String)
+            +isResolved() boolean
+            +resolve(decision: WarningDecision) void
+        }
+
+        class WarningDecision {
+            -decisionId : String
+            -outcome : String
+            -decidedBy : String
+            -decidedAt : LocalDateTime
+            +WarningDecision(decisionId: String, outcome: String, decidedBy: String, decidedAt: LocalDateTime)
+            +isProceed() boolean
+        }
+
+        class ObservationSession {
+            -sessionId : String
+            -status : String
+            -startTime : LocalDateTime
+            +ObservationSession(sessionId: String)
+            +start() void
+        }
+    }
+
+    namespace ocs.application {
+        class ProgramSubmissionService {
+            -sciencePlanRepo : SciencePlanRepository
+            -programRepo : ObservingProgramRepository
+            +ProgramSubmissionService(sciencePlanRepo: SciencePlanRepository, programRepo: ObservingProgramRepository)
+            +submitProgram(planId: String, programId: String) boolean
+        }
+
+        class InstrumentSetupService {
+            -instrumentGateway : InstrumentGateway
+            -programRepo : ObservingProgramRepository
+            +InstrumentSetupService(instrumentGateway: InstrumentGateway, programRepo: ObservingProgramRepository)
+            +setupInstrument(programId: String) boolean
+        }
+
+        class ProgramExecutionService {
+            -validator : ProgramValidator
+            -warningService : WarningConfirmationService
+            -telescopeGateway : TelescopeGateway
+            -weatherGateway : WeatherGateway
+            -programRepo : ObservingProgramRepository
+            +ProgramExecutionService(validator: ProgramValidator, warningService: WarningConfirmationService, telescopeGateway: TelescopeGateway, weatherGateway: WeatherGateway, programRepo: ObservingProgramRepository)
+            +startProgram(programId: String) boolean
+        }
+
+        class ProgramValidator {
+            -programRepo : ObservingProgramRepository
+            +ProgramValidator(programRepo: ObservingProgramRepository)
+            +validateProgram(programId: String, warningService: WarningConfirmationService) boolean
+        }
+
+        class WarningConfirmationService {
+            -programRepo : ObservingProgramRepository
+            -auditRepo : AuditRepository
+            +WarningConfirmationService(programRepo: ObservingProgramRepository, auditRepo: AuditRepository)
+            +confirmWarning(programId: String, warningId: String, observerId: String, proceed: boolean) boolean
+        }
+    }
+
+    namespace ocs.ports {
+        class SciencePlanRepository {
+            <<interface>>
+            +findById(planId: String) SciencePlan
+            +save(plan: SciencePlan) void
+        }
+        class ObservingProgramRepository {
+            <<interface>>
+            +findById(programId: String) ObservingProgram
+            +save(program: ObservingProgram) void
+        }
+        class AuditRepository {
+            <<interface>>
+            +logAction(action: String) void
+        }
+        class InstrumentGateway {
+            <<interface>>
+            +readCurrentConfig() String
+            +applyConfig(config: String) boolean
+        }
+        class TelescopeGateway {
+            <<interface>>
+            +startObservation() boolean
+        }
+        class WeatherGateway {
+            <<interface>>
+            +checkSafeConditions() boolean
+        }
+    }
+
+    namespace ocs.storage {
+        class FileSciencePlanRepository {
+            +FileSciencePlanRepository()
+            +findById(planId: String) SciencePlan
+            +save(plan: SciencePlan) void
+        }
+        class FileObservingProgramRepository {
+            +FileObservingProgramRepository()
+            +findById(programId: String) ObservingProgram
+            +save(program: ObservingProgram) void
+        }
+        class FileAuditRepository {
+            +FileAuditRepository()
+            +logAction(action: String) void
+        }
+    }
+
+    namespace ocs.simulation {
+        class SimulatedInstrument {
+            -currentConfig : String
+            +SimulatedInstrument()
+            +readCurrentConfig() String
+            +applyConfig(config: String) boolean
+        }
+        class SimulatedTelescope {
+            +SimulatedTelescope()
+            +startObservation() boolean
+        }
+        class SimulatedWeather {
+            +SimulatedWeather()
+            +checkSafeConditions() boolean
+        }
+    }
+
+    namespace java.io {
+        class Serializable {
+            <<interface>>
+        }
+    }
+
+    %% ---------- Bootstrap wiring ----------
+    Main ..> OcsCli
+    Main ..> ProgramSubmissionService
+    Main ..> InstrumentSetupService
+    Main ..> ProgramExecutionService
+    Main ..> ProgramValidator
+    Main ..> WarningConfirmationService
+    Main ..> FileSciencePlanRepository
+    Main ..> FileObservingProgramRepository
+    Main ..> FileAuditRepository
+    Main ..> SimulatedInstrument
+    Main ..> SimulatedTelescope
+    Main ..> SimulatedWeather
+
+    %% ---------- CLI -> Application ----------
+    OcsCli --> "1" ProgramSubmissionService : -submissionService
+    OcsCli --> "1" InstrumentSetupService : -setupService
+    OcsCli --> "1" ProgramExecutionService : -executionService
+    OcsCli --> "1" WarningConfirmationService : -warningService
+
+    %% ---------- Domain ----------
+    SciencePlan "1" o--> "1..*" ObservingProgram : -programs
+    ObservingProgram "1" *--> "0..*" SoftErrorWarning : -warnings
+    ObservingProgram "1" o--> "0..1" InstrumentConfiguration : -configuration
+    ObservingProgram "1" *--> "0..*" ObservationSession : -sessions
+    SoftErrorWarning "1" --> "0..1" WarningDecision : -decision
+
+    %% ---------- Application -> Ports / Services ----------
+    ProgramSubmissionService --> "1" SciencePlanRepository : -sciencePlanRepo
+    ProgramSubmissionService --> "1" ObservingProgramRepository : -programRepo
+    InstrumentSetupService --> "1" InstrumentGateway : -instrumentGateway
+    InstrumentSetupService --> "1" ObservingProgramRepository : -programRepo
+    ProgramExecutionService --> "1" ProgramValidator : -validator
+    ProgramExecutionService --> "1" WarningConfirmationService : -warningService
+    ProgramExecutionService --> "1" TelescopeGateway : -telescopeGateway
+    ProgramExecutionService --> "1" WeatherGateway : -weatherGateway
+    ProgramExecutionService --> "1" ObservingProgramRepository : -programRepo
+    ProgramValidator --> "1" ObservingProgramRepository : -programRepo
+    WarningConfirmationService --> "1" ObservingProgramRepository : -programRepo
+    WarningConfirmationService --> "1" AuditRepository : -auditRepo
+
+    %% Dependency between application services
+    ProgramValidator ..> WarningConfirmationService
+
+    %% ---------- Realizations ----------
+    FileSciencePlanRepository ..|> SciencePlanRepository
+    FileObservingProgramRepository ..|> ObservingProgramRepository
+    FileAuditRepository ..|> AuditRepository
+    SimulatedInstrument ..|> InstrumentGateway
+    SimulatedTelescope ..|> TelescopeGateway
+    SimulatedWeather ..|> WeatherGateway
+    SciencePlan ..|> Serializable
+    ObservingProgram ..|> Serializable
+    InstrumentConfiguration ..|> Serializable
+    SoftErrorWarning ..|> Serializable
+    WarningDecision ..|> Serializable
+    ObservationSession ..|> Serializable
+
+    %% ---------- Notes: roles / design patterns ----------
+    note for Main "Role: Composition Root (wires all dependencies)"
+    note for OcsCli "Role: Entry point. UC-04 Submit (Astronomer), UC-05 Configure and UC-03 Start (Telescope Operator), UC-01 Confirm Warning (Science Observer). Pattern: Constructor-based Dependency Injection"
+    note for SciencePlan "Role: Entity (Aggregate)"
+    note for ObservingProgram "Role: Entity (Aggregate Root)"
+    note for InstrumentConfiguration "Role: Entity"
+    note for SoftErrorWarning "Role: Entity"
+    note for WarningDecision "Role: Value Object (record of decision)"
+    note for ObservationSession "Role: Entity"
+    note for ProgramSubmissionService "Role: Application Service (UC-04)"
+    note for InstrumentSetupService "Role: Application Service (UC-05)"
+    note for ProgramExecutionService "Role: Application Service (UC-03)"
+    note for ProgramValidator "Role: Application Service (Validate Program)"
+    note for WarningConfirmationService "Role: Application Service (UC-01)"
+    note for SciencePlanRepository "Role: Port (Repository)"
+    note for ObservingProgramRepository "Role: Port (Repository)"
+    note for AuditRepository "Role: Port (Repository)"
+    note for InstrumentGateway "Role: Port (external system)"
+    note for TelescopeGateway "Role: Port (external system)"
+    note for WeatherGateway "Role: Port (external system)"
+    note for FileSciencePlanRepository "Role: Adapter (Repository)"
+    note for FileObservingProgramRepository "Role: Adapter (Repository)"
+    note for FileAuditRepository "Role: Adapter (Repository)"
+    note for SimulatedInstrument "Role: Adapter (simulated external system)"
+    note for SimulatedTelescope "Role: Adapter (simulated external system)"
+    note for SimulatedWeather "Role: Adapter (simulated external system)"
