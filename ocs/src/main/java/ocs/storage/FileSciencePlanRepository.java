@@ -13,15 +13,18 @@ import java.util.Map;
 import ocs.domain.InstrumentConfiguration;
 import ocs.domain.ObservingProgram;
 import ocs.domain.SciencePlan;
+import ocs.domain.SoftErrorWarning;
 import ocs.ports.SciencePlanRepository;
 
 public class FileSciencePlanRepository implements SciencePlanRepository {
 
     public FileSciencePlanRepository() {
         if (Files.notExists(dataFile())) {
-            InstrumentConfiguration configuration = new InstrumentConfiguration("CFG-01", "GMOS:R400:r");
+            InstrumentConfiguration configuration = new InstrumentConfiguration("GMOS:R400:r");
+            ObservingProgram readyProgram = new ObservingProgram("OP-01", configuration);
+            readyProgram.addWarning(new SoftErrorWarning("WARN-01", "High airmass may reduce image quality"));
             SciencePlan plan = new SciencePlan("SP-01", List.of(
-                    new ObservingProgram("OP-01", configuration),
+                    readyProgram,
                     new ObservingProgram("OP-02", null)));
             Map<String, SciencePlan> plans = new HashMap<>();
             plans.put(plan.getPlanId(), plan);

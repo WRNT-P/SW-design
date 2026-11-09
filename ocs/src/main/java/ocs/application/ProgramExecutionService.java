@@ -22,6 +22,22 @@ public class ProgramExecutionService {
     }
 
     public boolean startProgram(String programId) {
-        throw new UnsupportedOperationException();
+        if (!validator.validateProgram(programId, warningService)) {
+            return false;
+        }
+        var program = programRepo.findById(programId);
+        if (program == null || program.isLocked() || program.getConfiguration() == null
+                || !program.getConfiguration().isInstrumentReady()) {
+            return false;
+        }
+        if (!weatherGateway.checkSafeConditions()) {
+            return false;
+        }
+        if (!telescopeGateway.startObservation()) {
+            return false;
+        }
+        program.start();
+        programRepo.save(program);
+        return true;
     }
 }

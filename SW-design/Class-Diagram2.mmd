@@ -11,21 +11,30 @@ classDiagram
             -submissionService : ProgramSubmissionService
             -setupService : InstrumentSetupService
             -executionService : ProgramExecutionService
-            -warningService : WarningConfirmationService
-            +OcsCli(submissionService: ProgramSubmissionService, setupService: InstrumentSetupService, executionService: ProgramExecutionService, warningService: WarningConfirmationService)
+            -scanner : Scanner
+            -output : PrintWriter
+            +OcsCli(submissionService: ProgramSubmissionService, setupService: InstrumentSetupService, executionService: ProgramExecutionService, scanner: Scanner, output: PrintWriter)
             +start() void
             +submitProgram(planId: String, programId: String) void
             +setupInstrument(programId: String) void
             +startProgram(programId: String) void
-            +confirmWarning(programId: String, warningId: String, observerId: String, proceed: boolean) void
+            -execute(words: String[]) boolean
+        }
+        class ConsoleWarningDecisionPrompt {
+            -scanner : Scanner {readOnly}
+            -output : PrintWriter {readOnly}
+            -clock : Clock {readOnly}
+            +ConsoleWarningDecisionPrompt(scanner: Scanner, output: PrintWriter, clock: Clock)
+            +requestDecision(programId: String, warning: SoftErrorWarning) WarningDecision
+            -decision(observerId: String, proceed: boolean) WarningDecision
         }
     }
 
     namespace ocs.domain {
         class SciencePlan {
-            -planId : String
+            -planId : String {readOnly}
             -status : String
-            -programs : List~ObservingProgram~
+            -programs : List~ObservingProgram~ {readOnly}
             +SciencePlan(planId: String, programs: List~ObservingProgram~)
             +getPlanId() String
             +getStatus() String
@@ -33,27 +42,30 @@ classDiagram
         }
 
         class ObservingProgram {
-            -programId : String
+            -programId : String {readOnly}
             -status : String
             -isLocked : boolean
-            -warnings : List~SoftErrorWarning~
-            -configuration : InstrumentConfiguration
-            -sessions : List~ObservationSession~
+            -warnings : List~SoftErrorWarning~ {readOnly}
+            -configuration : InstrumentConfiguration {readOnly}
+            -sessions : List~ObservationSession~ {readOnly}
             +ObservingProgram(programId: String, configuration: InstrumentConfiguration)
             +getProgramId() String
+            +getStatus() String
             +validate() boolean
             +submit() void
             +lock() void
             +start() void
             +addWarning(warning: SoftErrorWarning) void
             +getConfiguration() InstrumentConfiguration
+            +getWarnings() List~SoftErrorWarning~
+            +getWarning(warningId: String) SoftErrorWarning
+            +isLocked() boolean
         }
 
         class InstrumentConfiguration {
-            -configId : String
-            -requiredConfig : String
+            -requiredConfig : String {readOnly}
             -isReady : boolean
-            +InstrumentConfiguration(configId: String, requiredConfig: String)
+            +InstrumentConfiguration(requiredConfig: String)
             +getRequiredConfig() String
             +matches(actualConfig: String) boolean
             +markReady() void
@@ -61,43 +73,52 @@ classDiagram
         }
 
         class SoftErrorWarning {
-            -warningId : String
-            -condition : String
+            -warningId : String {readOnly}
+            -condition : String {readOnly}
             -decision : WarningDecision
             +SoftErrorWarning(warningId: String, condition: String)
             +isResolved() boolean
             +resolve(decision: WarningDecision) void
+            +getWarningId() String
+            +getCondition() String
+            +getDecision() WarningDecision
         }
 
         class WarningDecision {
-            -decisionId : String
-            -outcome : String
-            -decidedBy : String
-            -decidedAt : LocalDateTime
+            -decisionId : String {readOnly}
+            -outcome : String {readOnly}
+            -decidedBy : String {readOnly}
+            -decidedAt : LocalDateTime {readOnly}
             +WarningDecision(decisionId: String, outcome: String, decidedBy: String, decidedAt: LocalDateTime)
+            +getDecisionId() String
             +isProceed() boolean
+            +getDecidedAt() LocalDateTime
+            +getDecidedBy() String
         }
 
         class ObservationSession {
-            -sessionId : String
+            -sessionId : String {readOnly}
             -status : String
             -startTime : LocalDateTime
             +ObservationSession(sessionId: String)
             +start() void
+            +getSessionId() String
+            +getStatus() String
+            +getStartTime() LocalDateTime
         }
     }
 
     namespace ocs.application {
         class ProgramSubmissionService {
-            -sciencePlanRepo : SciencePlanRepository
-            -programRepo : ObservingProgramRepository
+            -sciencePlanRepo : SciencePlanRepository {readOnly}
+            -programRepo : ObservingProgramRepository {readOnly}
             +ProgramSubmissionService(sciencePlanRepo: SciencePlanRepository, programRepo: ObservingProgramRepository)
             +submitProgram(planId: String, programId: String) boolean
         }
 
         class InstrumentSetupService {
-            -instrumentGateway : InstrumentGateway
-            -programRepo : ObservingProgramRepository
+            -instrumentGateway : InstrumentGateway {readOnly}
+            -programRepo : ObservingProgramRepository {readOnly}
             +InstrumentSetupService(instrumentGateway: InstrumentGateway, programRepo: ObservingProgramRepository)
             +setupInstrument(programId: String) boolean
         }
@@ -113,16 +134,17 @@ classDiagram
         }
 
         class ProgramValidator {
-            -programRepo : ObservingProgramRepository
+            -programRepo : ObservingProgramRepository {readOnly}
             +ProgramValidator(programRepo: ObservingProgramRepository)
             +validateProgram(programId: String, warningService: WarningConfirmationService) boolean
         }
 
         class WarningConfirmationService {
-            -programRepo : ObservingProgramRepository
-            -auditRepo : AuditRepository
-            +WarningConfirmationService(programRepo: ObservingProgramRepository, auditRepo: AuditRepository)
-            +confirmWarning(programId: String, warningId: String, observerId: String, proceed: boolean) boolean
+            -programRepo : ObservingProgramRepository {readOnly}
+            -auditRepo : AuditRepository {readOnly}
+            -decisionPrompt : WarningDecisionPrompt {readOnly}
+            +WarningConfirmationService(programRepo: ObservingProgramRepository, auditRepo: AuditRepository, decisionPrompt: WarningDecisionPrompt)
+            +confirmWarning(programId: String, warningId: String) boolean
         }
     }
 
@@ -153,6 +175,10 @@ classDiagram
         class WeatherGateway {
             <<interface>>
             +checkSafeConditions() boolean
+        }
+        class WarningDecisionPrompt {
+            <<interface>>
+            +requestDecision(programId: String, warning: SoftErrorWarning) WarningDecision
         }
     }
 
@@ -191,9 +217,16 @@ classDiagram
     }
 
     namespace java.io {
+        class PrintWriter
         class Serializable {
             <<interface>>
         }
+    }
+    namespace java.util {
+        class Scanner
+    }
+    namespace java.time {
+        class Clock
     }
 
     %% ---------- Bootstrap wiring ----------
@@ -209,12 +242,17 @@ classDiagram
     Main ..> SimulatedInstrument
     Main ..> SimulatedTelescope
     Main ..> SimulatedWeather
+    Main ..> ConsoleWarningDecisionPrompt
+    Main ..> Scanner
+    Main ..> PrintWriter
+    Main ..> Clock
 
     %% ---------- CLI -> Application ----------
     OcsCli --> "1" ProgramSubmissionService : -submissionService
     OcsCli --> "1" InstrumentSetupService : -setupService
     OcsCli --> "1" ProgramExecutionService : -executionService
-    OcsCli --> "1" WarningConfirmationService : -warningService
+    OcsCli --> "1" Scanner : -scanner
+    OcsCli --> "1" PrintWriter : -output
 
     %% ---------- Domain ----------
     SciencePlan "1" o--> "1..*" ObservingProgram : -programs
@@ -236,6 +274,10 @@ classDiagram
     ProgramValidator --> "1" ObservingProgramRepository : -programRepo
     WarningConfirmationService --> "1" ObservingProgramRepository : -programRepo
     WarningConfirmationService --> "1" AuditRepository : -auditRepo
+    WarningConfirmationService --> "1" WarningDecisionPrompt : -decisionPrompt
+    ConsoleWarningDecisionPrompt --> "1" Scanner : -scanner
+    ConsoleWarningDecisionPrompt --> "1" PrintWriter : -output
+    ConsoleWarningDecisionPrompt --> "1" Clock : -clock
 
     %% Dependency between application services
     ProgramValidator ..> WarningConfirmationService
@@ -247,6 +289,7 @@ classDiagram
     SimulatedInstrument ..|> InstrumentGateway
     SimulatedTelescope ..|> TelescopeGateway
     SimulatedWeather ..|> WeatherGateway
+    ConsoleWarningDecisionPrompt ..|> WarningDecisionPrompt
     SciencePlan ..|> Serializable
     ObservingProgram ..|> Serializable
     InstrumentConfiguration ..|> Serializable
@@ -256,7 +299,7 @@ classDiagram
 
     %% ---------- Notes: roles / design patterns ----------
     note for Main "Role: Composition Root (wires all dependencies)"
-    note for OcsCli "Role: Entry point. UC-04 Submit (Astronomer), UC-05 Configure and UC-03 Start (Telescope Operator), UC-01 Confirm Warning (Science Observer). Pattern: Constructor-based Dependency Injection"
+note for OcsCli "Role: Entry point. UC-04 Submit (Astronomer), UC-05 Configure and UC-03 Start (Telescope Operator). Pattern: Constructor-based Dependency Injection"
     note for SciencePlan "Role: Entity (Aggregate)"
     note for ObservingProgram "Role: Entity (Aggregate Root)"
     note for InstrumentConfiguration "Role: Entity"
@@ -274,6 +317,8 @@ classDiagram
     note for InstrumentGateway "Role: Port (external system)"
     note for TelescopeGateway "Role: Port (external system)"
     note for WeatherGateway "Role: Port (external system)"
+    note for WarningDecisionPrompt "Role: Port (CLI actor interaction)"
+    note for ConsoleWarningDecisionPrompt "Role: Adapter (CLI actor interaction)"
     note for FileSciencePlanRepository "Role: Adapter (Repository)"
     note for FileObservingProgramRepository "Role: Adapter (Repository)"
     note for FileAuditRepository "Role: Adapter (Repository)"

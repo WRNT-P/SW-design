@@ -7,8 +7,8 @@ import ocs.ports.ObservingProgramRepository;
 
 public class InstrumentSetupService {
 
-    private InstrumentGateway instrumentGateway;
-    private ObservingProgramRepository programRepo;
+    private final InstrumentGateway instrumentGateway;
+    private final ObservingProgramRepository programRepo;
 
     public InstrumentSetupService(InstrumentGateway instrumentGateway, ObservingProgramRepository programRepo) {
         this.instrumentGateway = instrumentGateway;

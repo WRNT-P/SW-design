@@ -5,11 +5,11 @@ import ocs.ports.TelescopeGateway;
 public class SimulatedTelescope implements TelescopeGateway {
 
     public SimulatedTelescope() {
-        // Not implemented yet.
+        // No external telescope is connected in the prototype.
     }
 
     @Override
     public boolean startObservation() {
-        throw new UnsupportedOperationException();
+        return true;
     }
 }

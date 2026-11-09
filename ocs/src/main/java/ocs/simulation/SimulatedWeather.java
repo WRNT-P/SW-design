@@ -10,6 +10,6 @@ public class SimulatedWeather implements WeatherGateway {
 
     @Override
     public boolean checkSafeConditions() {
-        throw new UnsupportedOperationException();
+        return true;
     }
 }

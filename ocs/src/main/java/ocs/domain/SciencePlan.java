@@ -6,8 +6,8 @@ import java.util.List;
 
 public class SciencePlan implements Serializable {
 
-    private String planId;
-    private List<ObservingProgram> programs;
+    private final String planId;
+    private final List<ObservingProgram> programs;
 
     public SciencePlan(String planId, List<ObservingProgram> programs) {
         this.planId = planId;

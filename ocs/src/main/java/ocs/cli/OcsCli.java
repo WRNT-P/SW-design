@@ -1,49 +1,58 @@
 package ocs.cli;
 
+import java.io.PrintWriter;
 import java.util.Scanner;
 
 import ocs.application.InstrumentSetupService;
 import ocs.application.ProgramExecutionService;
 import ocs.application.ProgramSubmissionService;
-import ocs.application.WarningConfirmationService;
 
 public class OcsCli {
 
-    private ProgramSubmissionService submissionService;
-    private InstrumentSetupService setupService;
-    private ProgramExecutionService executionService;
-    private WarningConfirmationService warningService;
+    private final ProgramSubmissionService submissionService;
+    private final InstrumentSetupService setupService;
+    private final ProgramExecutionService executionService;
+    private final Scanner scanner;
+    private final PrintWriter output;
 
     public OcsCli(ProgramSubmissionService submissionService, InstrumentSetupService setupService,
-            ProgramExecutionService executionService, WarningConfirmationService warningService) {
+            ProgramExecutionService executionService, Scanner scanner, PrintWriter output) {
         this.submissionService = submissionService;
         this.setupService = setupService;
         this.executionService = executionService;
-        this.warningService = warningService;
+        this.scanner = scanner;
+        this.output = output;
     }
 
     public void start() {
-        try (Scanner scanner = new Scanner(System.in)) {
-            boolean running = true;
-            while (running && scanner.hasNextLine()) {
-                running = execute(scanner.nextLine().trim().split("\\s+"));
-            }
+        boolean running = true;
+        while (running && scanner.hasNextLine()) {
+            running = execute(scanner.nextLine().trim().split("\\s+"));
         }
     }
 
     public void submitProgram(String planId, String programId) {
         if (submissionService.submitProgram(planId, programId)) {
-            System.out.println("Submitted");
+            output.println("Submitted");
         } else {
-            System.out.println("Submission failed");
+            output.println("Submission failed");
         }
     }
 
     public void setupInstrument(String programId) {
         if (setupService.setupInstrument(programId)) {
-            System.out.println("Instrument ready");
+            output.println("Instrument ready");
         } else {
-            System.out.println("Setup failed");
+            output.println("Setup failed");
+        }
+    }
+
+    public void startProgram(String programId) {
+        if (executionService.startProgram(programId)) {
+            output.println("Started: " + programId);
+        } else {
+            output.println("Start rejected: check submission, instrument, weather, telescope, "
+                    + "and warning decisions");
         }
     }
 
@@ -56,8 +65,10 @@ public class OcsCli {
             submitProgram(words[1], words[2]);
         } else if ("setup".equals(command) && words.length == 2) {
             setupInstrument(words[1]);
+        } else if ("start".equals(command) && words.length == 2) {
+            startProgram(words[1]);
         } else {
-            System.out.println("Commands: submit <planId> <programId> | setup <programId> | exit");
+            output.println("Commands: submit <planId> <programId> | setup <programId> | start <programId> | exit");
         }
         return true;
     }

@@ -7,8 +7,8 @@ import ocs.ports.SciencePlanRepository;
 
 public class ProgramSubmissionService {
 
-    private SciencePlanRepository sciencePlanRepo;
-    private ObservingProgramRepository programRepo;
+    private final SciencePlanRepository sciencePlanRepo;
+    private final ObservingProgramRepository programRepo;
 
     public ProgramSubmissionService(SciencePlanRepository sciencePlanRepo, ObservingProgramRepository programRepo) {
         this.sciencePlanRepo = sciencePlanRepo;

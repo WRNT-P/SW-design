@@ -4,12 +4,10 @@ import java.io.Serializable;
 
 public class InstrumentConfiguration implements Serializable {
 
-    private String configId;
-    private String requiredConfig;
+    private final String requiredConfig;
     private boolean isReady;
 
-    public InstrumentConfiguration(String configId, String requiredConfig) {
-        this.configId = configId;
+    public InstrumentConfiguration(String requiredConfig) {
         this.requiredConfig = requiredConfig;
     }
 
@@ -23,5 +21,9 @@ public class InstrumentConfiguration implements Serializable {
 
     public void markReady() {
         isReady = true;
+    }
+
+    public boolean isInstrumentReady() {
+        return isReady;
     }
 }
