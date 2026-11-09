@@ -26,8 +26,11 @@ public class ProgramExecutionService {
             return false;
         }
         var program = programRepo.findById(programId);
-        if (program == null || program.isLocked() || program.getConfiguration() == null
-                || !program.getConfiguration().isInstrumentReady()) {
+        var config = program.getConfiguration();
+        if (!config.isInstrumentReady()) {
+            return false;
+        }
+        if (program.isLocked()) {
             return false;
         }
         if (!weatherGateway.checkSafeConditions()) {
