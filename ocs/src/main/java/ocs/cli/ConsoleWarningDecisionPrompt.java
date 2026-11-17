@@ -12,6 +12,8 @@ import ocs.ports.WarningDecisionPrompt;
 
 public class ConsoleWarningDecisionPrompt implements WarningDecisionPrompt {
 
+    private static final String NO_RESPONSE = "NO_RESPONSE";
+
     private final Scanner scanner;
     private final PrintWriter output;
     private final Clock clock;
@@ -29,14 +31,14 @@ public class ConsoleWarningDecisionPrompt implements WarningDecisionPrompt {
         output.print("Observer ID: ");
         output.flush();
         if (!scanner.hasNextLine()) {
-            return decision("NO_RESPONSE", false);
+            return decision(NO_RESPONSE, false);
         }
         String observerId = scanner.nextLine().trim();
         if (observerId.isEmpty()) {
-            return decision("NO_RESPONSE", false);
+            return decision(NO_RESPONSE, false);
         }
         if (!scanner.hasNextLine()) {
-            return decision("NO_RESPONSE", false);
+            return decision(NO_RESPONSE, false);
         }
         output.print("Proceed with observation? (y/n): ");
         output.flush();

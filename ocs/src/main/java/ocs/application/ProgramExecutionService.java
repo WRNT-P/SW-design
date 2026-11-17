@@ -6,10 +6,10 @@ import ocs.ports.WeatherGateway;
 
 public class ProgramExecutionService {
 
-    private ProgramValidator validator;
-    private TelescopeGateway telescopeGateway;
-    private WeatherGateway weatherGateway;
-    private ObservingProgramRepository programRepo;
+    private final ProgramValidator validator;
+    private final TelescopeGateway telescopeGateway;
+    private final WeatherGateway weatherGateway;
+    private final ObservingProgramRepository programRepo;
 
     public ProgramExecutionService(ProgramValidator validator, TelescopeGateway telescopeGateway,
             WeatherGateway weatherGateway, ObservingProgramRepository programRepo) {
