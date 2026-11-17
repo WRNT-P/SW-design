@@ -32,8 +32,11 @@ public class ConsoleWarningDecisionPrompt implements WarningDecisionPrompt {
             return decision("NO_RESPONSE", false);
         }
         String observerId = scanner.nextLine().trim();
-        if (observerId.isEmpty() || !scanner.hasNextLine()) {
-            return decision(observerId.isEmpty() ? "NO_RESPONSE" : observerId, false);
+        if (observerId.isEmpty()) {
+            return decision("NO_RESPONSE", false);
+        }
+        if (!scanner.hasNextLine()) {
+            return decision("NO_RESPONSE", false);
         }
         output.print("Proceed with observation? (y/n): ");
         output.flush();

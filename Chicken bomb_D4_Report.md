@@ -1,6 +1,6 @@
 # Chicken bomb D4 Report
 
-This report describes the design in `Chicken bomb_D4_Design.md` and the Java code in `ocs/` at commit `58d3edc`. The Java code is unchanged in later commits.
+This report describes the design in `Chicken bomb_D4_Design.md` and the Java code in `ocs/`. The implementation was originally aligned at commit `58d3edc`; fixes from AI Review run 1 are reflected in the current working tree and listed in Section 6 with a commit placeholder for the team to fill after committing.
 
 ## 1. Design Rationale
 
@@ -28,14 +28,14 @@ The imports in the code follow the package diagram, and the dependencies form no
 
 Most interactions are data coupling. Services take identifiers (`String`) and return `boolean`. The gateways exchange `String` and `boolean` values. Where a whole domain object is passed, as in `ObservingProgramRepository.save(ObservingProgram)` and `WarningDecisionPrompt.requestDecision(String, SoftErrorWarning)`, the coupling is stamp coupling. `ConsoleWarningDecisionPrompt` only uses `getWarningId()` and `getCondition()` of the warning.
 
-Two places have tighter coupling than this:
+Two coupling choices are worth noting:
 
-- **A service passed as a parameter.** `ProgramExecutionService` holds `warningService` only to pass it on in `validator.validateProgram(programId, warningService)`. This follows the dependency (not association) from `ProgramValidator` to `WarningConfirmationService` in the class diagram. Injecting the service into the constructor of `ProgramValidator` would remove the extra field.
+- **Constructor-injected service association.** `ProgramValidator` receives `WarningConfirmationService` through its constructor and keeps it for warning confirmation. `ProgramExecutionService` depends only on `ProgramValidator` and no longer carries or passes the warning service on each call.
 - **Reaching through objects.** `ProgramValidator` calls `warning.getDecision().isProceed()`. `ProgramExecutionService` and `InstrumentSetupService` call `program.getConfiguration()` and then call `InstrumentConfiguration` directly. These services therefore depend on how the `ObservingProgram` aggregate is structured. We accepted this because each of these calls is shown in a sequence diagram and stays within `ocs.domain` types.
 
 ### 1.3 Connascence
 
-Across packages, most connascence is of name and type. Services depend on the operation names and parameter types of the port interfaces, and the compiler checks both. The constructors with five parameters (`OcsCli`, `ProgramExecutionService`) take five different types, so a wrong order fails to compile.
+Across packages, most connascence is of name and type. Services depend on the operation names and parameter types of the port interfaces, and the compiler checks both. The constructor with five parameters (`OcsCli`) and the constructor with four parameters (`ProgramExecutionService`) use different types at each position, so a wrong order fails to compile.
 
 Stronger forms remain in the following places:
 
@@ -190,10 +190,11 @@ setup OP-01
 |---|---|---|
 | Program not found (2a) | `setup OP-404` | `Setup failed` |
 | Program not submitted (2a) | `setup OP-01` on a fresh state, before any `submit` | `Setup failed` |
+| Program already started (2a) | `submit SP-01 OP-01`, `setup OP-01`, `start OP-01`, `OBSERVER-01`, `y`, `setup OP-01` | The program starts, then the final setup attempt reports `Setup failed` because its status is `Running` |
 | Current configuration already matches (3a) | `submit SP-01 OP-01`, `setup OP-01`, `setup OP-01` in the same running process | The second setup skips applying a new configuration, verifies the current configuration, and reports `Instrument ready` |
 | Verification unsuccessful (5a) | Not reproducible through the current CLI: `SimulatedInstrument.applyConfig` always succeeds and stores the requested configuration | The failure branch exists in `InstrumentSetupService`, but this prototype offers no CLI input or adapter setting to force a verification mismatch |
 
-A program that has not been submitted is not stored in `data/programs.ser`, so setup rejects it as not found (`setup OP-02` also prints `Setup failed`). Setup does not check the program status explicitly, so a program that has already started can be set up again.
+A program that has not been submitted is not stored in `data/programs.ser`, so the fresh-state CLI example rejects it as not found (`setup OP-01` before submission and `setup OP-02` both print `Setup failed`). `InstrumentSetupService` also checks the stored program status and rejects any status other than `Submitted`, including a program that has already started.
 
 ### UC-03 — Start Observing Program
 
@@ -247,7 +248,7 @@ exit
 |---|---|---|
 | More than one unresolved warning (2a) | No sample with multiple warnings is provided | The code loops through the warnings one by one; each needs an observer ID and decision before validation completes |
 | Observer does not proceed (4a) | `submit SP-01 OP-01`, `setup OP-01`, `start OP-01`, `OBSERVER-01`, `n` | A timestamped `STOP` decision by `OBSERVER-01` is recorded; `Start rejected: …` |
-| No observer ID or response (4b) | `submit SP-01 OP-01`, `setup OP-01`, `start OP-01`, then an empty line | A `STOP` decision with `NO_RESPONSE` as the decision maker is recorded; `Start rejected: …` |
+| No observer ID or response (4b) | `submit SP-01 OP-01`, `setup OP-01`, `start OP-01`, then an empty line; alternatively, enter an observer ID and end input before the proceed answer | A `STOP` decision with `NO_RESPONSE` as the decision maker is recorded; `Start rejected: …` |
 
 The prompt has no timeout mechanism. A blank observer ID and the end of input are the implemented no-response cases.
 
@@ -274,7 +275,8 @@ The tables link each use case step to the messages of its sequence diagram in `C
 |---|---|---|
 | 1. Operator selects the program and starts setup | `TelescopeOperator->>Cli: setupInstrument(programId)` | Telescope Operator, through the command `setup <programId>`, read and dispatched by `OcsCli.execute(String[])` |
 | 1. (continued) | `Cli->>SetupSvc: setupInstrument(programId)` | `OcsCli.setupInstrument(String)` |
-| 2. Retrieve the program and its required configuration | `SetupSvc->>ProgRepo: findById(programId)`<br>`SetupSvc->>Prog: getConfiguration()`<br>`SetupSvc->>Config: getRequiredConfig()` | `InstrumentSetupService.setupInstrument(String)` |
+| 2. Retrieve the program, require Submitted status, and get its required configuration | `SetupSvc->>ProgRepo: findById(programId)`<br>`SetupSvc->>Prog: getStatus()`<br>`SetupSvc->>Prog: getConfiguration()`<br>`SetupSvc->>Config: getRequiredConfig()` | `InstrumentSetupService.setupInstrument(String)` |
+| 2a. Program not found or not submitted | `SetupSvc-->>Cli: false` | `InstrumentSetupService.setupInstrument(String)` |
 | 3. Read the current configuration and compare | `SetupSvc->>Gateway: readCurrentConfig()`<br>`SetupSvc->>Config: matches(actualConfig)` | `InstrumentSetupService.setupInstrument(String)` |
 | 4. Send the required configuration to the ICS | `SetupSvc->>Gateway: applyConfig(requiredConfig)` | `InstrumentSetupService.setupInstrument(String)` |
 | 5. Read the configuration again and verify | `SetupSvc->>Gateway: readCurrentConfig()`<br>`SetupSvc->>Config: matches(verifiedConfig)` | `InstrumentSetupService.setupInstrument(String)` |
@@ -288,12 +290,14 @@ The tables link each use case step to the messages of its sequence diagram in `C
 |---|---|---|
 | 1. Operator commands the system to start the program | `TO->>cli: startProgram(programId)` | Telescope Operator, through the command `start <programId>`, read and dispatched by `OcsCli.execute(String[])` |
 | 1. (continued) | `cli->>svc: startProgram(programId)` | `OcsCli.startProgram(String)` |
-| 2. Validate the program | `svc->>val: validateProgram(programId, warningService)` | `ProgramExecutionService.startProgram(String)` |
-| 2. (continued) | `val->>repo: findById(programId)`<br>`val->>prog: getStatus()`<br>`val->>prog: validate()`<br>`val->>prog: getWarnings()` | `ProgramValidator.validateProgram(String, WarningConfirmationService)` |
-| 2b. Handle each soft-error warning | `val->>warning: isResolved()`<br>`val->>warnSvc: confirmWarning(programId, warningId)`<br>`val->>warning: getDecision()`<br>`val->>dec: isProceed()` | `ProgramValidator.validateProgram(String, WarningConfirmationService)` |
+| 2. Validate the program | `svc->>val: validateProgram(programId)` | `ProgramExecutionService.startProgram(String)` |
+| 2. (continued) | `val->>repo: findById(programId)`<br>if found: `val->>prog: getStatus()` then `val->>prog: validate()`<br>if valid: `val->>prog: getWarnings()` | `ProgramValidator.validateProgram(String)` |
+| 2a. Program not found | `val-->>svc: false` | `ProgramValidator.validateProgram(String)` |
+| 2a. Program not submitted or invalid | `val-->>svc: false` after `getStatus()` and `validate()` | `ProgramValidator.validateProgram(String)` |
+| 2b. Handle each soft-error warning | `val->>warning: isResolved()`<br>`val->>warnSvc: confirmWarning(programId, warningId)`<br>`val->>warning: getDecision()`<br>`val->>dec: isProceed()` | `ProgramValidator.validateProgram(String)` |
 | 2b. (UC-01 inside UC-03) | `warnSvc->>repo: findById(programId)`<br>`warnSvc->>prog: getWarning(warningId)`<br>`warnSvc->>prompt: requestDecision(programId, warning)`<br>`warnSvc->>warning: resolve(decision)`<br>`warnSvc->>audit: logAction(action)`<br>`warnSvc->>repo: save(program)` | `WarningConfirmationService.confirmWarning(String, String)` |
 | 2b. (UC-01 inside UC-03) | `prompt-->>SO: Present warning (program + condition)` | `ConsoleWarningDecisionPrompt.requestDecision(String, SoftErrorWarning)` |
-| 2b. (UC-01 inside UC-03) | `SO-->>prompt: proceed or stop, observerId` | Science Observer; input read by `ConsoleWarningDecisionPrompt.requestDecision(String, SoftErrorWarning)` |
+| 2b. (UC-01 inside UC-03) | `SO-->>prompt: proceed or stop, observerId` or missing input; `prompt->>dec: «create» WarningDecision(...)`, including `"STOP", "NO_RESPONSE"` for missing input | Science Observer; input and decision creation handled by `ConsoleWarningDecisionPrompt.requestDecision(String, SoftErrorWarning)` and `decision(String, boolean)` |
 | 3. Check that the instrument is ready | `svc->>repo: findById(programId)`<br>`svc->>prog: getConfiguration()`<br>`svc->>cfg: isInstrumentReady()` | `ProgramExecutionService.startProgram(String)` |
 | 4. Check that the program is not locked | `svc->>prog: isLocked()` | `ProgramExecutionService.startProgram(String)` |
 | 5. Check the weather | `svc->>wx: checkSafeConditions()` | `ProgramExecutionService.startProgram(String)` |
@@ -310,12 +314,12 @@ UC-01 is reached during UC-03 validation; the diagram starts with the `start <pr
 |---|---|---|
 | (UC-03 start) | `TO->>CLI: startProgram(programId)` | Telescope Operator, through `start <programId>`, read and dispatched by `OcsCli.execute(String[])` |
 | (UC-03 start) | `CLI->>EXE: startProgram(programId)` | `OcsCli.startProgram(String)` |
-| (UC-03 start) | `EXE->>VAL: validateProgram(programId, warningService)` | `ProgramExecutionService.startProgram(String)` |
-| 1. Validate Program finds an unresolved soft-error warning | `VAL->>REPO: findById(programId)`<br>`VAL->>PROG: getWarnings()`<br>`VAL->>WCS: confirmWarning(programId, warningId)` | `ProgramValidator.validateProgram(String, WarningConfirmationService)` |
+| (UC-03 start) | `EXE->>VAL: validateProgram(programId)` | `ProgramExecutionService.startProgram(String)` |
+| 1. Validate Program finds an unresolved soft-error warning | `VAL->>REPO: findById(programId)`<br>`VAL->>PROG: getWarnings()`<br>`VAL->>WCS: confirmWarning(programId, warningId)` | `ProgramValidator.validateProgram(String)` |
 | 2. Present the warning to the Science Observer | `WCS->>REPO: findById(programId)`<br>`WCS->>PROG: getWarning(warningId)`<br>`WCS->>PROMPT: requestDecision(programId, warning)` | `WarningConfirmationService.confirmWarning(String, String)` |
 | 2. (continued) | `PROMPT-->>SO: Present warning (program + condition)` | `ConsoleWarningDecisionPrompt.requestDecision(String, SoftErrorWarning)` |
-| 3–4. Observer reviews and enters an ID and decision | `SO-->>PROMPT: proceed or stop, observerId` | Science Observer; input read by `ConsoleWarningDecisionPrompt.requestDecision(String, SoftErrorWarning)` |
-| 5. Create the decision | `PROMPT->>DEC: «create» WarningDecision(decisionId, outcome, observerId, timestamp)` | `ConsoleWarningDecisionPrompt.decision(String, boolean)`, called from `requestDecision` |
+| 3–4. Observer reviews and enters an ID and decision | `SO-->>PROMPT: proceed or stop, observerId`, or missing input | Science Observer; input read by `ConsoleWarningDecisionPrompt.requestDecision(String, SoftErrorWarning)` |
+| 5. Create the decision | `PROMPT->>DEC: «create» WarningDecision(decisionId, outcome, decidedBy, decidedAt)`; no ID/no answer uses `"STOP", "NO_RESPONSE"` | `ConsoleWarningDecisionPrompt.decision(String, boolean)`, called from `requestDecision` |
 | 5. (continued) | `PROMPT-->>WCS: decision` | `ConsoleWarningDecisionPrompt.requestDecision(String, SoftErrorWarning)` (return) |
 | 5. Resolve, audit and store | `WCS->>WRN: resolve(decision)`<br>`WCS->>AUD: logAction(action)`<br>`WCS->>REPO: save(program)` | `WarningConfirmationService.confirmWarning(String, String)` |
 | 6. Return control to Validate Program | `WCS-->>VAL: true` | `WarningConfirmationService.confirmWarning(String, String)` (return) |
@@ -338,17 +342,17 @@ SonarQube for IDE automatic analysis was enabled in VS Code. The SonarQube Findi
 
 | No. | Finding | Team's response |
 |---|---|---|
-| 1 | UC-05 precondition requires a submitted program, while alternative 2a also describes an unsubmitted program; the sequence diagram only shows “program not found.” | Pending team decision: reconcile the precondition and alternative, or state that the alternative covers a stale or malformed repository record. |
-| 2 | UC-01 alternative 4b records a STOP decision with `NO_RESPONSE` when there is no observer ID, but the sequence diagram does not show the missing-ID/no-answer branch or the `NO_RESPONSE` value. | Pending team decision: add the branch and decision value to the sequence diagram. |
-| 3 | `OcsCli` fields are `final` in code but are not marked `readOnly` in the class diagram. | Pending team decision: update the diagram or change field mutability. |
-| 4 | `InstrumentSetupService` does not check the program lifecycle status; as the report already notes, it can set up a program that is already Running. | Documented as a known limitation; decide whether setup should reject a Running program and add a guard if required. |
-| 5 | `ProgramValidator`'s `||` expression short-circuits, so the `getStatus()` and `validate()` sequence messages do not both occur on all paths. | Pending team decision: update the diagram to show the short-circuit paths or adjust the implementation. |
+| 1 | UC-05 precondition and alternative 2a were inconsistent about unsubmitted programs. | `Fixed in commit <hash>` |
+| 2 | UC-01 sequence omitted the no-ID/no-answer branch that creates a STOP decision with `NO_RESPONSE`. | `Fixed in commit <hash>` |
+| 3 | `OcsCli` fields were `final` in code but were not marked `readOnly` in the class diagram. | `Fixed in commit <hash>` |
+| 4 | `InstrumentSetupService` allowed setup when a stored program was not Submitted. | `Fixed in commit <hash>` |
+| 5 | `ProgramValidator` and the UC-03 sequence did not agree on null, status and validation branches. | `Fixed in commit <hash>` |
 | 6 | The package diagram shows project packages but omits Java standard-library dependencies used by the source. | Pending team decision: show the JDK package dependencies or state that the package diagram covers project packages only. |
 | 7 | `OcsCli.execute` has logical cohesion. | Kept as a private command-line dispatcher, as explained in Section 1.1. |
 | 8 | `ProgramExecutionService` holds five collaborator references. | Noted; consider extracting a focused collaborator if the service grows. |
 | 9 | Repository `save` calls pass the full `ObservingProgram` aggregate (stamp coupling). | Accepted as the repository persistence contract, as explained in Section 1.2. |
 | 10 | `WarningDecisionPrompt` receives a full `SoftErrorWarning` although the console adapter uses only the ID and condition (stamp coupling). | Accepted for this prototype; a narrow warning view is an option if the boundary needs to change. |
-| 11 | `ProgramExecutionService` passes `WarningConfirmationService` to `ProgramValidator`, which uses it to control warning handling. | The rationale identifies constructor injection as an alternative; final decision pending. |
+| 11 | `ProgramExecutionService` passed `WarningConfirmationService` to `ProgramValidator` on each validation call. | `Fixed in commit <hash>` |
 | 12 | `ProgramValidator` and the setup/execution services reach through domain objects to access nested decision/configuration data. | Accepted and documented in Section 1.2; intent-level domain operations may reduce this coupling. |
 
 Full review output: [reviews/AI_Review_410aa93.md](reviews/AI_Review_410aa93.md).
@@ -357,6 +361,6 @@ Full review output: [reviews/AI_Review_410aa93.md](reviews/AI_Review_410aa93.md)
 
 | AI tool and exact model | Purpose | Files or parts produced or changed | How the team checked the output |
 |---|---|---|---|
-| OpenAI Codex, GPT-6 | Drafted earlier versions of the design rationale and use case execution sections; drafted traceability and quality evidence; reviewed the code/design and then re-reviewed the consolidated report | Earlier Part 1–3 drafts were replaced by this merged report; current review: `reviews/AI_Review_410aa93.md`; no source code or design file changed | Compared the report with `Chicken bomb_D4_Design.md` and Java source; the current review records findings and dispositions above |
+| OpenAI Codex, GPT-6 | Drafted earlier report sections; reviewed the code/design; applied the six fixes from AI Review run 1 | Updated `Chicken bomb_D4_Design.md`, `InstrumentSetupService.java`, `ProgramValidator.java`, `ProgramExecutionService.java`, `Main.java`, `ConsoleWarningDecisionPrompt.java`, and this report; current review: `reviews/AI_Review_410aa93.md` | Built with Maven and ran the reported main and alternate CLI flows in fresh working directories |
 | Claude Code, Claude Opus 5.5 (`claude-opus-5-5`) | Converted the Phase 1 use case descriptions and the team's Mermaid diagrams into the design file; drafted the use case selection rationale and the revised use case descriptions; aligned the diagrams and the code (sequence diagram notation, class diagram members, order of checks in `ProgramExecutionService`) | `Chicken bomb_D4_Design.md`; `ProgramExecutionService.java` and `SimulatedWeather.java` (commit `58d3edc`) | Parsed every Mermaid diagram with Mermaid 11.4.1; compared the class diagram members with the Java code; built with `mvn package` and ran the main and alternate flows of all four use cases |
 | Claude Code, Claude Opus 5.5 (`claude-opus-5-5`) | Drafted section 1; reviewed sections 2–7 against the project description, the design and the code; corrected the inputs, the expected results and the traceability senders; merged the report | `Chicken bomb_D4_Report.md` | Ran every input sequence in sections 2–3 on a fresh build and data directory; checked each traceability row against the sequence diagrams and the sending Java method |

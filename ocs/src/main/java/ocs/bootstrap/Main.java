@@ -33,7 +33,7 @@ public class Main {
         OcsCli cli = new OcsCli(
                 new ProgramSubmissionService(new FileSciencePlanRepository(), programRepo),
                 new InstrumentSetupService(new SimulatedInstrument(), programRepo),
-                new ProgramExecutionService(new ProgramValidator(programRepo), warningService,
+                new ProgramExecutionService(new ProgramValidator(programRepo, warningService),
                         new SimulatedTelescope(), new SimulatedWeather(), programRepo),
                 scanner, output);
         cli.start();

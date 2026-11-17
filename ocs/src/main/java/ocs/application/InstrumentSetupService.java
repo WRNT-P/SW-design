@@ -20,6 +20,9 @@ public class InstrumentSetupService {
         if (program == null) {
             return false;
         }
+        if (!"Submitted".equals(program.getStatus())) {
+            return false;
+        }
         InstrumentConfiguration configuration = program.getConfiguration();
         String requiredConfig = configuration.getRequiredConfig();
 

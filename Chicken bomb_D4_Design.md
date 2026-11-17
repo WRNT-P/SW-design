@@ -100,11 +100,11 @@ classDiagram
 
     namespace ocs.cli {
         class OcsCli {
-            -submissionService : ProgramSubmissionService
-            -setupService : InstrumentSetupService
-            -executionService : ProgramExecutionService
-            -scanner : Scanner
-            -output : PrintWriter
+            -submissionService : ProgramSubmissionService #123;readOnly#125;
+            -setupService : InstrumentSetupService #123;readOnly#125;
+            -executionService : ProgramExecutionService #123;readOnly#125;
+            -scanner : Scanner #123;readOnly#125;
+            -output : PrintWriter #123;readOnly#125;
             +OcsCli(submissionService: ProgramSubmissionService, setupService: InstrumentSetupService, executionService: ProgramExecutionService, scanner: Scanner, output: PrintWriter)
             +start() void
             +submitProgram(planId: String, programId: String) void
@@ -215,18 +215,18 @@ classDiagram
 
         class ProgramExecutionService {
             -validator : ProgramValidator
-            -warningService : WarningConfirmationService
             -telescopeGateway : TelescopeGateway
             -weatherGateway : WeatherGateway
             -programRepo : ObservingProgramRepository
-            +ProgramExecutionService(validator: ProgramValidator, warningService: WarningConfirmationService, telescopeGateway: TelescopeGateway, weatherGateway: WeatherGateway, programRepo: ObservingProgramRepository)
+            +ProgramExecutionService(validator: ProgramValidator, telescopeGateway: TelescopeGateway, weatherGateway: WeatherGateway, programRepo: ObservingProgramRepository)
             +startProgram(programId: String) boolean
         }
 
         class ProgramValidator {
             -programRepo : ObservingProgramRepository #123;readOnly#125;
-            +ProgramValidator(programRepo: ObservingProgramRepository)
-            +validateProgram(programId: String, warningService: WarningConfirmationService) boolean
+            -warningService : WarningConfirmationService #123;readOnly#125;
+            +ProgramValidator(programRepo: ObservingProgramRepository, warningService: WarningConfirmationService)
+            +validateProgram(programId: String) boolean
         }
 
         class WarningConfirmationService {
@@ -364,20 +364,17 @@ classDiagram
     InstrumentSetupService --> "1" InstrumentGateway : -instrumentGateway
     InstrumentSetupService --> "1" ObservingProgramRepository : -programRepo
     ProgramExecutionService --> "1" ProgramValidator : -validator
-    ProgramExecutionService --> "1" WarningConfirmationService : -warningService
     ProgramExecutionService --> "1" TelescopeGateway : -telescopeGateway
     ProgramExecutionService --> "1" WeatherGateway : -weatherGateway
     ProgramExecutionService --> "1" ObservingProgramRepository : -programRepo
     ProgramValidator --> "1" ObservingProgramRepository : -programRepo
+    ProgramValidator --> "1" WarningConfirmationService : -warningService
     WarningConfirmationService --> "1" ObservingProgramRepository : -programRepo
     WarningConfirmationService --> "1" AuditRepository : -auditRepo
     WarningConfirmationService --> "1" WarningDecisionPrompt : -decisionPrompt
     ConsoleWarningDecisionPrompt --> "1" Scanner : -scanner
     ConsoleWarningDecisionPrompt --> "1" PrintWriter : -output
     ConsoleWarningDecisionPrompt --> "1" Clock : -clock
-
-    %% Dependency between application services
-    ProgramValidator ..> WarningConfirmationService
 
     %% ---------- Realizations ----------
     FileSciencePlanRepository ..|> SciencePlanRepository
@@ -490,35 +487,42 @@ sequenceDiagram
         SetupSvc-->>Cli: false
         Cli-->>TelescopeOperator: Show result: Setup failed
     else program found
-        SetupSvc->>Prog: getConfiguration()
-        Prog-->>SetupSvc: config
-        SetupSvc->>Config: getRequiredConfig()
-        Config-->>SetupSvc: requiredConfig
-
-        SetupSvc->>Gateway: readCurrentConfig()
-        Gateway-->>SetupSvc: actualConfig
-        SetupSvc->>Config: matches(actualConfig)
-        Config-->>SetupSvc: matches
-
-        opt actual config differs from required (matches = false)
-            SetupSvc->>Gateway: applyConfig(requiredConfig)
-            Note right of Gateway: Command sent to ICS (simulated)
-            Gateway-->>SetupSvc: applied
-        end
-
-        SetupSvc->>Gateway: readCurrentConfig()
-        Gateway-->>SetupSvc: verifiedConfig
-        SetupSvc->>Config: matches(verifiedConfig)
-        Config-->>SetupSvc: matches
-
-        alt re-check passed (matches = true)
-            SetupSvc->>Config: markReady()
-            SetupSvc->>ProgRepo: save(program)
-            SetupSvc-->>Cli: true
-            Cli-->>TelescopeOperator: Show result: Instrument ready
-        else re-check failed (matches = false)
+        SetupSvc->>Prog: getStatus()
+        Prog-->>SetupSvc: status
+        alt program not submitted (status != "Submitted")
             SetupSvc-->>Cli: false
             Cli-->>TelescopeOperator: Show result: Setup failed
+        else program submitted
+            SetupSvc->>Prog: getConfiguration()
+            Prog-->>SetupSvc: config
+            SetupSvc->>Config: getRequiredConfig()
+            Config-->>SetupSvc: requiredConfig
+
+            SetupSvc->>Gateway: readCurrentConfig()
+            Gateway-->>SetupSvc: actualConfig
+            SetupSvc->>Config: matches(actualConfig)
+            Config-->>SetupSvc: matches
+
+            opt actual config differs from required (matches = false)
+                SetupSvc->>Gateway: applyConfig(requiredConfig)
+                Note right of Gateway: Command sent to ICS (simulated)
+                Gateway-->>SetupSvc: applied
+            end
+
+            SetupSvc->>Gateway: readCurrentConfig()
+            Gateway-->>SetupSvc: verifiedConfig
+            SetupSvc->>Config: matches(verifiedConfig)
+            Config-->>SetupSvc: matches
+
+            alt re-check passed (matches = true)
+                SetupSvc->>Config: markReady()
+                SetupSvc->>ProgRepo: save(program)
+                SetupSvc-->>Cli: true
+                Cli-->>TelescopeOperator: Show result: Instrument ready
+            else re-check failed (matches = false)
+                SetupSvc-->>Cli: false
+                Cli-->>TelescopeOperator: Show result: Setup failed
+            end
         end
     end
 ```
@@ -545,84 +549,98 @@ sequenceDiagram
 
     TO->>cli: startProgram(programId)
     cli->>svc: startProgram(programId)
-    svc->>val: validateProgram(programId, warningService)
+    svc->>val: validateProgram(programId)
     val->>repo: findById(programId)
     repo-->>val: program
-    val->>prog: getStatus()
-    prog-->>val: status
-    val->>prog: validate()
-    prog-->>val: valid
-    alt 2a: missing, invalid or not submitted
+    alt 2a: program not found (program = null)
         val-->>svc: false
         svc-->>cli: false
-    else valid
-        val->>prog: getWarnings()
-        prog-->>val: warnings
-        loop Each soft error
-            val->>warning: isResolved()
-            warning-->>val: resolved
-            alt warning unresolved
-                val->>warnSvc: confirmWarning(programId, warningId)
-                warnSvc->>repo: findById(programId)
-                repo-->>warnSvc: program
-                warnSvc->>prog: getWarning(warningId)
-                prog-->>warnSvc: warning
-                warnSvc->>prompt: requestDecision(programId, warning)
-                prompt-->>SO: Present warning (program + condition)
-                SO-->>prompt: proceed or stop, observerId
-                prompt-->>warnSvc: decision
-                warnSvc->>warning: resolve(decision)
-                warnSvc->>audit: logAction(action)
-                warnSvc->>repo: save(program)
-                alt observer proceeds
-                    warnSvc-->>val: true
-                else observer declines or disconnects
-                    warnSvc-->>val: false
-                    val-->>svc: false
-                    svc-->>cli: false
-                end
-            else warning already resolved
-                val->>warning: getDecision()
-                warning-->>val: decision
-                val->>dec: isProceed()
-                dec-->>val: proceed
-                opt earlier decision was stop
-                    val-->>svc: false
-                    svc-->>cli: false
+    else program found
+        val->>prog: getStatus()
+        prog-->>val: status
+        val->>prog: validate()
+        prog-->>val: valid
+        alt 2a: not submitted or invalid
+            val-->>svc: false
+            svc-->>cli: false
+        else submitted and valid
+            val->>prog: getWarnings()
+            prog-->>val: warnings
+            loop Each soft error
+                val->>warning: isResolved()
+                warning-->>val: resolved
+                alt warning unresolved
+                    val->>warnSvc: confirmWarning(programId, warningId)
+                    warnSvc->>repo: findById(programId)
+                    repo-->>warnSvc: program
+                    warnSvc->>prog: getWarning(warningId)
+                    prog-->>warnSvc: warning
+                    warnSvc->>prompt: requestDecision(programId, warning)
+                    prompt-->>SO: Present warning (program + condition)
+                    alt observer proceeds
+                        SO-->>prompt: observerId, proceed
+                        prompt->>dec: «create» WarningDecision(decisionId, "PROCEED", observerId, decidedAt)
+                    else observer declines
+                        SO-->>prompt: observerId, stop
+                        prompt->>dec: «create» WarningDecision(decisionId, "STOP", observerId, decidedAt)
+                    else no observer ID or no answer
+                        SO-->>prompt: missing input
+                        prompt->>dec: «create» WarningDecision(decisionId, "STOP", "NO_RESPONSE", decidedAt)
+                    end
+                    prompt-->>warnSvc: decision
+                    warnSvc->>warning: resolve(decision)
+                    warnSvc->>audit: logAction(action)
+                    warnSvc->>repo: save(program)
+                    alt observer proceeds
+                        warnSvc-->>val: true
+                    else observer declines or gives no response
+                        warnSvc-->>val: false
+                        val-->>svc: false
+                        svc-->>cli: false
+                    end
+                else warning already resolved
+                    val->>warning: getDecision()
+                    warning-->>val: decision
+                    val->>dec: isProceed()
+                    dec-->>val: proceed
+                    opt earlier decision was stop
+                        val-->>svc: false
+                        svc-->>cli: false
+                    end
                 end
             end
-        end
-        val-->>svc: true
-        svc->>repo: findById(programId)
-        repo-->>svc: program
-        svc->>prog: getConfiguration()
-        prog-->>svc: config
-        svc->>cfg: isInstrumentReady()
-        cfg-->>svc: ready
-        alt 3a: not ready
-            svc-->>cli: false
-        else ready
-            svc->>prog: isLocked()
-            prog-->>svc: locked
-            alt 4a: locked
+            val-->>svc: true
+            svc->>repo: findById(programId)
+            repo-->>svc: program
+            svc->>prog: getConfiguration()
+            prog-->>svc: config
+            svc->>cfg: isInstrumentReady()
+            cfg-->>svc: ready
+            alt 3a: not ready
                 svc-->>cli: false
-            else unlocked
-                svc->>wx: checkSafeConditions()
-                wx-->>svc: safe
-                alt 5a: unsafe
+            else ready
+                svc->>prog: isLocked()
+                prog-->>svc: locked
+                alt 4a: locked
                     svc-->>cli: false
-                else safe
-                    svc->>tel: startObservation()
-                    tel-->>svc: started
-                    alt 6a: not started
+                else unlocked
+                    svc->>wx: checkSafeConditions()
+                    wx-->>svc: safe
+                    alt 5a: unsafe
                         svc-->>cli: false
-                    else started
-                        svc->>prog: start()
-                        create participant sess as session:ObservationSession
-                        prog->>sess: «create» ObservationSession(sessionId)
-                        prog->>sess: start()
-                        svc->>repo: save(program)
-                        svc-->>cli: true
+                    else safe
+                        svc->>tel: startObservation()
+                        tel-->>svc: started
+                        alt 6a: not started
+                            svc-->>cli: false
+                        else started
+                            svc->>prog: start()
+                            create participant sess as session:ObservationSession
+                            prog->>sess: «create» ObservationSession(sessionId)
+                            prog->>sess: start()
+                            svc->>repo: save(program)
+                            svc-->>cli: true
+                        end
                     end
                 end
             end
@@ -650,7 +668,7 @@ sequenceDiagram
 
     TO->>CLI: startProgram(programId)
     CLI->>EXE: startProgram(programId)
-    EXE->>VAL: validateProgram(programId, warningService)
+    EXE->>VAL: validateProgram(programId)
     VAL->>REPO: findById(programId)
     REPO-->>VAL: program
     VAL->>PROG: getWarnings()
@@ -663,8 +681,16 @@ sequenceDiagram
         PROG-->>WCS: warning
         WCS->>PROMPT: requestDecision(programId, warning)
         PROMPT-->>SO: Present warning (program + condition)
-        SO-->>PROMPT: proceed or stop, observerId
-        PROMPT->>DEC: «create» WarningDecision(decisionId, outcome, observerId, timestamp)
+        alt Observer proceeds
+            SO-->>PROMPT: observerId, proceed
+            PROMPT->>DEC: «create» WarningDecision(decisionId, "PROCEED", observerId, decidedAt)
+        else Observer declines
+            SO-->>PROMPT: observerId, stop
+            PROMPT->>DEC: «create» WarningDecision(decisionId, "STOP", observerId, decidedAt)
+        else no observer ID or no answer
+            SO-->>PROMPT: missing input
+            PROMPT->>DEC: «create» WarningDecision(decisionId, "STOP", "NO_RESPONSE", decidedAt)
+        end
         PROMPT-->>WCS: decision
         WCS->>WRN: resolve(decision)
         WCS->>AUD: logAction(action)
@@ -672,7 +698,7 @@ sequenceDiagram
         alt Observer proceeds
             WCS-->>VAL: true
             Note over VAL,EXE: Validation resumes and UC-03 continues
-        else Observer declines or disconnects
+        else Observer declines or gives no response
             WCS-->>VAL: false
             VAL-->>EXE: false
             EXE-->>CLI: false
@@ -720,11 +746,11 @@ sequenceDiagram
 | Description: | Allows the Telescope Operator to configure the instrument physically (filter, grating, detector mode, etc.) prior to the execution of a program, so that the Start Observing Program configuration check is satisfied. The operator runs it before Start Observing Program (UC-03), or after UC-03 reports that the instrument is not ready. |
 | Trigger: | The operator chooses a program and starts setup, or Start Observing Program (UC-03) reports that the instrument is not ready. |
 | Relationship: | Association: Telescope Operator, Instrument Control System (ICS) |
-| Preconditions: | 1. Operator login is successful.<br>2. The observing program has been submitted (UC-04) and specifies its required instrument configuration.<br>3. The instrument is not locked with any exposures. |
+| Preconditions: | 1. Operator login is successful.<br>2. The instrument is not locked with any exposures. |
 | Postconditions: | 1. Configuration of the instrument conforms to the requirements of the program.<br>2. The configuration is recorded relative to the program.<br>3. The instrument is in the ready state (or fails and remains in the last good state). |
 | Performance Goal: | Configuration test done within 5 seconds. |
-| Basic Workflow: | 1. The operator selects the program and starts setup.<br>2. The system retrieves the program and its required instrument configuration.<br>3. The system reads the current configuration from the ICS and checks it against the required one.<br>4. The system sends the required configuration to the ICS.<br>5. The ICS makes the changes; the system reads the configuration from the ICS again and verifies it.<br>6. The system marks the instrument configuration ready, records it with the program, and displays "Instrument ready". |
-| Alternative Workflow: | **2a. Program Not Found:** If the program does not exist or has not been submitted, the system displays "Setup failed". The use case ends.<br><br>**3a. Already Matches:** If the current configuration already matches the required one, the system skips step 4 and continues at step 5.<br><br>**5a. Verification Unsuccessful:** If the configuration still does not match, the system does not mark the instrument ready, keeps the previous state, and displays "Setup failed". The operator may run setup again. The use case ends. |
+| Basic Workflow: | 1. The operator selects the program and starts setup.<br>2. The system retrieves the program, checks that its status is Submitted, and gets its required instrument configuration.<br>3. The system reads the current configuration from the ICS and checks it against the required one.<br>4. The system sends the required configuration to the ICS.<br>5. The ICS makes the changes; the system reads the configuration from the ICS again and verifies it.<br>6. The system marks the instrument configuration ready, records it with the program, and displays "Instrument ready". |
+| Alternative Workflow: | **2a. Program Not Found or Not Submitted:** If the program does not exist or its status is not Submitted, the system displays "Setup failed". The use case ends.<br><br>**3a. Already Matches:** If the current configuration already matches the required one, the system skips step 4 and continues at step 5.<br><br>**5a. Verification Unsuccessful:** If the configuration still does not match, the system does not mark the instrument ready, keeps the previous state, and displays "Setup failed". The operator may run setup again. The use case ends. |
 | Category: | Observation Management |
 | Risks: | False "successful" report of hardware; concurrent operators at odds using the same machine; hurried verification due to time constraints. |
 | Possibilities: | Daytime pre-stage/config verifications; re-usable config templates; closed-loop sensor verifications. |
