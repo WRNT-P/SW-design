@@ -1,6 +1,6 @@
 # Chicken bomb D4 Report
 
-This report describes the design in `Chicken bomb_D4_Design.md` and the Java code in `ocs/`. The implementation was originally aligned at commit `58d3edc`; fixes from AI Review run 1 are reflected in the current working tree and listed in Section 6 with a commit placeholder for the team to fill after committing.
+This report describes the design in `Chicken bomb_D4_Design.md` and the Java code in `ocs/`. The fixes for the findings of AI review run 1 are in commit `3df5772` (Section 6), and the SonarQube fixes are in commit `ed3655b` (Section 5).
 
 ## 1. Design Rationale
 
@@ -41,7 +41,7 @@ Stronger forms remain in the following places:
 
 | Form | Where | Why it was kept or how it is limited |
 |---|---|---|
-| Meaning (literal) | `"Submitted"` is set in `ObservingProgram.submit()` and compared in `ProgramValidator.validateProgram()` | The class diagram types `status` as `String`. An `ObservingProgram.isSubmitted()` operation would move the comparison into the class that sets the value. |
+| Meaning (literal) | `"Submitted"` is set in `ObservingProgram.submit()` and compared in `ProgramValidator.validateProgram()` and `InstrumentSetupService.setupInstrument()` | The class diagram types `status` as `String`. An `ObservingProgram.isSubmitted()` operation would move the comparison into the class that sets the value. |
 | Meaning (literal) | `"PROCEED"`/`"STOP"` is created in `ConsoleWarningDecisionPrompt.decision()`, read in `WarningDecision.isProceed()`, and created again from `isProceed()` for the audit text in `WarningConfirmationService.confirmWarning()` | `isProceed()` hides the literal from `ocs.application`, but the prompt in `ocs.cli` must still use the same spelling. An enum in `ocs.domain` would replace this with connascence of name. |
 | Meaning (literal) | `"Running"` is set in both `ObservingProgram.start()` and `ObservationSession.start()` | No code reads it yet, so it is a shared convention only. |
 | Convention | `null` means "not found" for `findById`, `SciencePlan.getProgram` and `ObservingProgram.getWarning`, and every caller checks for `null` | The sequence diagrams model the alternatives as `= null` checks. |
@@ -336,31 +336,33 @@ SonarQube for IDE automatic analysis was enabled in VS Code. The final-code comm
 
 ## 6. AI Review
 
+The prompt in Appendix A of the project description was run on the commit below. The complete output of the run is saved in [reviews/2026-11-17_run1.md](reviews/2026-11-17_run1.md).
+
+### Run 1
+
 | Review date | AI tool and exact model/version | Commit reviewed | File access method |
 |---|---|---|---|
-| 2026-11-17 | OpenAI Codex, GPT-6 (exact build identifier not exposed) | `410aa9356912073a006b44d1b7eb9e8403800230` | Read the combined report, design and checked-out Java source files in the local repository |
+| 2026-11-17 | OpenAI Codex, model `luna`, reasoning effort medium (as shown in the Codex client) | `410aa9356912073a006b44d1b7eb9e8403800230` | The AI opened the local clone of the repository and read `Chicken bomb_D4_Design.md`, `Chicken bomb_D4_Report.md` and all Java files under `ocs/src/main/java` |
 
-| No. | Finding | Team's response |
-|---|---|---|
-| 1 | UC-05 precondition and alternative 2a were inconsistent about unsubmitted programs. | `Fixed in commit <hash>` |
-| 2 | UC-01 sequence omitted the no-ID/no-answer branch that creates a STOP decision with `NO_RESPONSE`. | `Fixed in commit <hash>` |
-| 3 | `OcsCli` fields were `final` in code but were not marked `readOnly` in the class diagram. | `Fixed in commit <hash>` |
-| 4 | `InstrumentSetupService` allowed setup when a stored program was not Submitted. | `Fixed in commit <hash>` |
-| 5 | `ProgramValidator` and the UC-03 sequence did not agree on null, status and validation branches. | `Fixed in commit <hash>` |
-| 6 | The package diagram shows project packages but omits Java standard-library dependencies used by the source. | Pending team decision: show the JDK package dependencies or state that the package diagram covers project packages only. |
-| 7 | `OcsCli.execute` has logical cohesion. | Kept as a private command-line dispatcher, as explained in Section 1.1. |
-| 8 | `ProgramExecutionService` holds five collaborator references. | Noted; consider extracting a focused collaborator if the service grows. |
-| 9 | Repository `save` calls pass the full `ObservingProgram` aggregate (stamp coupling). | Accepted as the repository persistence contract, as explained in Section 1.2. |
-| 10 | `WarningDecisionPrompt` receives a full `SoftErrorWarning` although the console adapter uses only the ID and condition (stamp coupling). | Accepted for this prototype; a narrow warning view is an option if the boundary needs to change. |
-| 11 | `ProgramExecutionService` passed `WarningConfirmationService` to `ProgramValidator` on each validation call. | `Fixed in commit <hash>` |
-| 12 | `ProgramValidator` and the setup/execution services reach through domain objects to access nested decision/configuration data. | Accepted and documented in Section 1.2; intent-level domain operations may reduce this coupling. |
-
-Full review output: [reviews/AI_Review_410aa93.md](reviews/AI_Review_410aa93.md).
+| No. | Check | Severity | Finding | Team's response |
+|---|---|---|---|---|
+| 1 | 1 | Should fix | UC-05 precondition 2 requires a submitted program, while alternative 2a also describes a program that has not been submitted. | Fixed in commit `3df5772`. Precondition 2 was removed; basic step 2 and alternative 2a now state that the system checks that the status is Submitted, as the code and the UC-05 sequence diagram do. |
+| 2 | 1 | Should fix | UC-01 alternative 4b records a `STOP` decision with `NO_RESPONSE`, but the sequence diagram has no branch for a missing observer ID or answer. | Fixed in commit `3df5772`. The UC-01 and UC-03 sequence diagrams have an alt fragment with the proceed, decline and no-response branches, each creating its `WarningDecision`. |
+| 3 | 2 | Note | The five `OcsCli` fields are `final` in the code but are not marked `{readOnly}` in the class diagram. | Fixed in commit `3df5772`. The five fields are marked `{readOnly}` in the class diagram. |
+| 4 | 3 | Should fix | `InstrumentSetupService.setupInstrument` does not check the program status, so a program that is already `Running` can be set up again. | Fixed in commit `3df5772`. `setupInstrument` calls `getStatus()` and rejects any status other than Submitted; the UC-05 sequence diagram shows the call and the alt branch. |
+| 5 | 3 | Should fix | In `ProgramValidator.validateProgram` the `\|\|` expression short-circuits, so `getStatus()` and `validate()` are not both called on every path, although the UC-03 diagram shows both before the alternative. | Fixed in commit `3df5772`. The code checks for `null` first and then calls `getStatus()` and `validate()` on every path where the program exists; the UC-03 diagram shows the same two alt branches. |
+| 6 | 3 | Note | The package diagram does not show the JDK packages (`java.io`, `java.time`, `java.util`, `java.nio.file`) that the code imports. | Kept. The project description defines the package diagram as the packages of the OCS. JDK packages are not part of the OCS; the class diagram shows the JDK classes that the design uses (`Scanner`, `PrintWriter`, `Clock`, `Serializable`). |
+| 7 | 4 | Note | `OcsCli.execute(String[])` has logical cohesion. | Kept. It is a private dispatcher that only parses the command word and calls one public `OcsCli` operation per command (Section 1.1). |
+| 8 | 4 | Note | `ProgramExecutionService` holds five collaborator references. | Kept. After the fix for finding 11 it holds four, each used by one step of UC-03: validation, the weather check, the telescope start and persistence. |
+| 9 | 4 | Note | Repository `save` operations receive the whole `ObservingProgram` aggregate (stamp coupling). | Kept. The repository stores the aggregate as one unit (Section 1.2). |
+| 10 | 4 | Note | `WarningDecisionPrompt.requestDecision` receives a whole `SoftErrorWarning` although the console adapter uses only its ID and condition (stamp coupling). | Kept. The port passes the domain object the use case is about, so other adapters can show more of the warning without changing the port (Section 1.2). |
+| 11 | 4 | Should fix | `ProgramExecutionService` passes `WarningConfirmationService` to `ProgramValidator` as a parameter. | Fixed in commit `3df5772`. `ProgramValidator` receives `WarningConfirmationService` through its constructor, `validateProgram` takes only `programId`, and `ProgramExecutionService` no longer holds the service; the class and sequence diagrams were updated. |
+| 12 | 4 | Note | `ProgramValidator` and the setup and execution services reach through domain objects (`warning.getDecision()`, `program.getConfiguration()`). | Kept. Each of these calls is shown in a sequence diagram and stays within `ocs.domain` types (Section 1.2). |
 
 ## 7. AI Usage Declaration
 
 | AI tool and exact model | Purpose | Files or parts produced or changed | How the team checked the output |
 |---|---|---|---|
-| OpenAI Codex, GPT-6 | Drafted earlier report sections; reviewed the code/design; applied the six fixes from AI Review run 1 | Updated `Chicken bomb_D4_Design.md`, `InstrumentSetupService.java`, `ProgramValidator.java`, `ProgramExecutionService.java`, `Main.java`, `ConsoleWarningDecisionPrompt.java`, and this report; current review: `reviews/AI_Review_410aa93.md` | Built with Maven and ran the reported main and alternate CLI flows in fresh working directories |
+| OpenAI Codex, model `luna`, reasoning effort medium | Drafted earlier versions of the report sections; ran AI review run 1; applied the six fixes from AI review run 1 | Earlier report drafts (replaced by this report); `reviews/2026-11-17_run1.md`; fixes in `Chicken bomb_D4_Design.md`, `InstrumentSetupService.java`, `ProgramValidator.java`, `ProgramExecutionService.java`, `Main.java`, `ConsoleWarningDecisionPrompt.java` and this report (commit `3df5772`) | Built with Maven and ran the reported main and alternate CLI flows in fresh working directories |
 | Claude Code, Claude Opus 5.5 (`claude-opus-5-5`) | Converted the Phase 1 use case descriptions and the team's Mermaid diagrams into the design file; drafted the use case selection rationale and the revised use case descriptions; aligned the diagrams and the code (sequence diagram notation, class diagram members, order of checks in `ProgramExecutionService`) | `Chicken bomb_D4_Design.md`; `ProgramExecutionService.java` and `SimulatedWeather.java` (commit `58d3edc`) | Parsed every Mermaid diagram with Mermaid 11.4.1; compared the class diagram members with the Java code; built with `mvn package` and ran the main and alternate flows of all four use cases |
-| Claude Code, Claude Opus 5.5 (`claude-opus-5-5`) | Drafted section 1; reviewed sections 2–7 against the project description, the design and the code; corrected the inputs, the expected results and the traceability senders; merged the report | `Chicken bomb_D4_Report.md` | Ran every input sequence in sections 2–3 on a fresh build and data directory; checked each traceability row against the sequence diagrams and the sending Java method |
+| Claude Code, Claude Opus 5.5 (`claude-opus-5-5`) | Drafted section 1; reviewed sections 2–7 against the project description, the design and the code; corrected the inputs, the expected results and the traceability senders; merged the report; merged the run 1 fixes branch, added the `NO_RESPONSE` constant to the class diagram and aligned UC-01 alternative 4b with the code | `Chicken bomb_D4_Report.md`; `Chicken bomb_D4_Design.md` | Ran every input sequence in sections 2–3 on a fresh build and data directory; checked each traceability row against the sequence diagrams and the sending Java method |
