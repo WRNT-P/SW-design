@@ -328,11 +328,11 @@ UC-01 is reached during UC-03 validation; the diagram starts with the `start <pr
 
 ## 5. SonarQube Results
 
-SonarQube for IDE automatic analysis was enabled in VS Code. The SonarQube Findings panel displayed "No SonarQube issues to display."
+SonarQube for IDE automatic analysis was enabled in VS Code. The final-code commit below was scanned after the fixes, and the Findings panel displayed **“No SonarQube issues to display.”** The earlier findings and their fixes are recorded for traceability.
 
 | Scan date | Commit scanned | SonarQube for IDE version | Issues (rule, file:line) | Fix or reason for keeping each issue |
 |---|---|---|---|---|
-| 2026-11-17 | `58d3edc9532bd52df5fa5266dc9786ec6ab1367b` | SonarQube for IDE 6.3.0 | No issues reported by the Findings panel | No fixes required |
+| 2026-11-17 | `ed3655bf54d63f939a7bca4c358daf26cd808a84` | SonarQube for IDE 6.3.0 | No issues reported | Earlier `java:S9438` findings in `ProgramExecutionService.java:9–12` were fixed in commit `ed3655b` by making the four fields `final`. Earlier `java:S1192` in `ConsoleWarningDecisionPrompt.java:32` was fixed in the same commit by defining and using the `NO_RESPONSE` constant. |
 
 ## 6. AI Review
 
